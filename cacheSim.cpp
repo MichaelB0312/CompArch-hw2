@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
 	unsigned set;
 	unsigned offset;
+	unsigned code_tag; //requested tag from user's code
 	way* ways; 
 } level_row;
 	
@@ -88,12 +89,14 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	unsigned BSize_pow = pow(2,BSize);
-	unsigned L1Size_pow = pow(2,L1Size);
-	unsigned L2Size_pow = pow(2,L2Size);
-	unsigned L1Assoc_pow = pow(2,L1Assoc);
-	unsigned L2Assoc_pow = pow(2,L2Assoc);	
-	unsigned L2Assoc_pow = pow(2,L2Assoc);	
+	// origin sizes are in log2, so convert it
+	BSize = pow(2,BSize);
+	L1Size = pow(2,L1Size);
+	L2Size = pow(2,L2Size);
+	L1Assoc = pow(2,L1Assoc);
+	L2Assoc = pow(2,L2Assoc);	
+	
+
 	if(init_cache(BSize,L1Size, L2Size, L1Assoc, L2Assoc, L1Cyc, L2Cyc, WrAlloc) == -1) 
 		return -1;
 
@@ -163,9 +166,9 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	L1->block_size = BSize;
 	L2->block_size = BSize;
 	if(L1Size%BSize_pow != 0) return -1; //check if no leftovers
-	if(L2Size_pow%BSize != 0) return -1; //check if no leftovers
+	if(L2Size%BSize != 0) return -1; //check if no leftovers
 	int num_rows1_per_way = (L1Size/BSize)/L1Assoc;
-	int num_rows2_per_way = (L2Size_pow/BSize)/L2Assoc;
+	int num_rows2_per_way = (L2Size/BSize)/L2Assoc;
 		
 	if((L1Assoc << 31) != 0) return -1; //check if divides into 2
 	L1->num_ways = L1Assoc;
@@ -181,6 +184,7 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	for( int i=0; i<num_rows1_per_way ; i++){
 		L1->level_rows[i]->set = 0;
 		L1->level_rows[i]->offset = 0;
+		L1->level_rows[i]->c = 0;
 		L1->level_rows[i]->ways = new way[L1Assoc];
 		if(!(L1->level_rows[i]->ways)) return -1;
 		memset(L1->level_rows[i]->ways, 0, sizeof(way)*L1Assoc);
