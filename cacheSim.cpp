@@ -100,7 +100,9 @@ int main(int argc, char **argv) {
 	if(init_cache(BSize,L1Size, L2Size, L1Assoc, L2Assoc, L1Cyc, L2Cyc, WrAlloc) == -1) 
 		return -1;
 
-
+	int instr_num = 0; //count number of input instructions
+	double time_access = 0.0;//total missing time
+	int	L1_miss_num = 0, L2_miss_num = 0;
 	
 	while (getline(file, line)) {
 
@@ -122,11 +124,27 @@ int main(int argc, char **argv) {
 		cout << ", address (hex)" << cutAddress;
 
 		unsigned long int num = 0;
+		// converts a hexadecimal string representation of an unsigned integer into a value
 		num = strtoul(cutAddress.c_str(), NULL, 16);
 
 		// DEBUG - remove this line
 		cout << " (dec) " << num << endl;
 
+		
+		//treating read case:
+		if (operation == 'r') {
+			read_func(&time_access,&L1_miss_num,&L2_miss_num);
+		}
+		// treating write case
+		else if (operation == 'w') {
+			write_func(&time_access,&L1_miss_num,&L2_miss_num);
+		}
+		else
+		{
+			return -1;
+		}
+
+		instr_num++;
 	}
 
 	double L1MissRate;
@@ -199,5 +217,17 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	}
 		
 	return 0;
+}
+
+
+/*
+ * read_func - doing the reading opearation, return 0 on success.
+ * param[out] time_access- aggregating time access of the current line instruction
+ * param[out] L2,L1_miss_num - increase it if there is a miss in L2,L1 cache
+ * 
+*/
+int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num) {
+
+
 }
 	
