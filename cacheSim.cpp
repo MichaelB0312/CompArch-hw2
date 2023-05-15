@@ -149,7 +149,7 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	
 	L1->time_access = L1Cyc;
 	L2->time_access = L2Cyc;
-		
+	
 	if(WrAlloc == 0){
 		L1->is_write_allocate = false;
 		L2->is_write_allocate = false;
@@ -182,19 +182,20 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	if(!(L1->level_rows) || !(L2->level_rows)) return -1;
 	
 	for( int i=0; i<num_rows1_per_way ; i++){
-		L1->level_rows[i]->set = 0;
-		L1->level_rows[i]->offset = 0;
-		L1->level_rows[i]->c = 0;
-		L1->level_rows[i]->ways = new way[L1Assoc];
-		if(!(L1->level_rows[i]->ways)) return -1;
-		memset(L1->level_rows[i]->ways, 0, sizeof(way)*L1Assoc);
+		(L1->level_rows[i]).set = 0;
+		(L1->level_rows[i]).offset = 0;
+		(L1->level_rows[i]).code_tag = 0;
+		(L1->level_rows[i]).ways = new way[L1Assoc];
+		if(!((L1->level_rows[i]).ways)) return -1;
+		memset((L1->level_rows[i]).ways, 0, sizeof(way)*L1Assoc);
 	}
 	for( int i=0; i<num_rows2_per_way ; i++){
-		L2->level_rows[i]->set = 0;
-		L2->level_rows[i]->offset = 0;
-		L2->level_rows[i]->ways = new way[L2Assoc];
-		if(!(L2->level_rows[i]->ways)) return -1;
-		memset(L2->level_rows[i]->ways, 0, sizeof(way)*L2Assoc);
+		(L2->level_rows[i]).set = 0;
+		(L2->level_rows[i]).offset = 0;
+		(L2->level_rows[i]).code_tag = 0;
+		(L2->level_rows[i]).ways = new way[L1Assoc];
+		if (!((L2->level_rows[i]).ways)) return -1;
+		memset((L2->level_rows[i]).ways, 0, sizeof(way) * L1Assoc);
 	}
 		
 	return 0;
