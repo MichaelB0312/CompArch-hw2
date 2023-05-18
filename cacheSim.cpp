@@ -4,7 +4,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <maths>
+#include <cmath>
+#include <cstring>
 
 using std::FILE;
 using std::string;
@@ -41,7 +42,12 @@ typedef struct {
 one_level *L1;
 one_level *L2;
 	
-
+int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc,
+			unsigned L2Assoc,unsigned L1Cyc,unsigned L2Cyc,unsigned WrAlloc);
+int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc);
+void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag);
+int hit(unsigned adr_set, unsigned way_num, unsigned level_num, double *time_access);
+void update_LRU(unsigned level_num, unsigned adr_set, unsigned curr_way);
 int main(int argc, char **argv) {
 
 	if (argc < 19) {
@@ -133,7 +139,7 @@ int main(int argc, char **argv) {
 		}
 		// treating write case
 		else if (operation == 'w') {
-			write_func(&time_access,&L1_miss_num,&L2_miss_num, num);
+			//write_func(&time_access,&L1_miss_num,&L2_miss_num, num);
 		}
 		else
 		{
@@ -159,7 +165,7 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 			unsigned L2Assoc,unsigned L1Cyc,unsigned L2Cyc,unsigned WrAlloc){
 	
 	// origin sizes are in log2, so convert it
-	BSize_pow = pow(2,BSize);
+	unsigned BSize_pow = pow(2,BSize);
 	L1Size = pow(2,L1Size);
 	L2Size = pow(2,L2Size);
 	L1Assoc = pow(2,L1Assoc);
@@ -197,9 +203,9 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	if((L2Assoc << 31) != 0) return -1; //check if divides into 2
 	L2->num_ways = L2Assoc;
 		
-	if(num_rows1%L1Assoc != 0) return -1;
+	if(num_rows1_per_way%L1Assoc != 0) return -1;
 	L1->level_rows = new level_row[num_rows1_per_way];
-	if(num_rows2%L2Assoc != 0) return -1;
+	if(num_rows2_per_way%L2Assoc != 0) return -1;
 	L2->level_rows = new level_row[num_rows2_per_way];
 	if(!(L1->level_rows) || !(L2->level_rows)) return -1;
 	
@@ -234,29 +240,12 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
  * 
 */
 int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc) {
-	unsigned adr_mask = -1;
-	adr_mask = adr_mask >> (32 - L1->offset_size);
-	unsigned adr_offset = num & adr_mask ;
-	//set of address L1
-	unsigned num_shift = num >> L1->offset_size;
-	adr_mask = -1;
-	adr_mask = adr_mask >> (32 - L1->set_size);
-	unsigned adr_set_L1 = num_shift & adr_mask;
-	//set of address L2
-	adr_mask = -1;
-	adr_mask = adr_mask >> (32 - L2->set_size);
-	unsigned adr_set_L2 = num_shift & adr_mask;
-
-	//tag address L1 & L2
-	unsigned num_shift_tag1 = num_shift >> L1->set_size;
-	unsigned num_shift_tag2 = num_shift >> L2->set_size;
-	unsigned adr_mask_tag1 = -1;
-	unsigned adr_mask_tag2 = -1;
-	adr_mask_tag1 = adr_mask >> (32 - L1->tag_size);
-	adr_mask_tag2 = adr_mask >> (32 - L2->tag_size);
-	unsigned adr_tag_L1 = num_shift_tag1 & adr_mask_tag1;
-	unsigned adr_tag_L2 = num_shift_tag2 & adr_mask_tag2;
 	
+	unsigned adr_offset, adr_set_L1, adr_set_L2, adr_tag_L1, adr_tag_L2;
+	
+	find_set_tag(L1, num, &adr_offset, &adr_set_L1, &adr_tag_L1);
+	find_set_tag(L2, num, &adr_offset, &adr_set_L2, &adr_tag_L2);
+		
 	//check tag of L1
 	int level_num = 1;
 	for (int i=0; i < L1->num_ways ; i++){
@@ -265,7 +254,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			//hit read:
 			// update LRU
 			// update time access
-			if ( hit(adr_set_L1, i, level_num, &time_access) != 0)
+			if ( hit(adr_set_L1, i, level_num, time_access) != 0)
 				return -1;
 			return 0;
 		}
@@ -278,7 +267,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			//hit read:
 			// update LRU
 			// update time access
-			if ( hit(adr_set_L2, i, level_num, &time_access) != 0)
+			if ( hit(adr_set_L2, i, level_num, time_access) != 0)
 				return -1;
 			return 0;
 		}
@@ -291,45 +280,54 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	bool flag_updated_L2 = false;
 	*time_access += MemCyc + L2->time_access;
 	for (int i=0; i < L2->num_ways ; i++){ // check if empty space
-		if (L2->level_rows[adr_set_L2]).ways[i].valid_bit == false){
+		if ( (L2->level_rows[adr_set_L2]).ways[i].valid_bit == false){
 			(L2->level_rows[adr_set_L2]).ways[i].tag = adr_tag_L2;
-			L2->level_rows[adr_set_L2]).ways[i].valid_bit = true;
+			(L2->level_rows[adr_set_L2]).ways[i].valid_bit = true;
 			update_LRU(level_num, adr_set_L2, i);
-			flag_updated = true;
+			flag_updated_L2 = true;
 			break;
 		} 
 	}
 	if (flag_updated_L2 == false){ // if no empty, find smallest LRU
 		for (int i=0; i < L2->num_ways ; i++){
-			if ( L2->level_rows[adr_set_L2]).ways[i].LRU_state == 0){
+			if (( L2->level_rows[adr_set_L2]).ways[i].LRU_state == 0){
 				// check if dirty_bit
-				if ( L2->level_rows[adr_set_L2]).ways[i].dirty_bit == true ){
+				if ((L2->level_rows[adr_set_L2]).ways[i].dirty_bit == true ){
 					*time_access += MemCyc;
-					L2->level_rows[adr_set_L2]).ways[i].dirty_bit = false;
+					(L2->level_rows[adr_set_L2]).ways[i].dirty_bit = false;
 				}
 				// update valid bit to 1
-				L2->level_rows[adr_set_L2]).ways[i].valid_bit = true;
+				(L2->level_rows[adr_set_L2]).ways[i].valid_bit = true;
 				// is the line P in L1 -- if yes, delete from L1
-				for( int s=0 ; s < pow(2,L1->set_size);s++){ //check for each set
-					for (int w=0 ; w < L1->num_ways; w++){ // check for each way in each set
-						//check if same tag
-						if( (L1->level_rows[s]).ways[w].tag == (L2->level_rows[adr_set_L2]).ways[i].tag ){
-							// if same tag, check if dirty
-							if ( L1->level_rows[s]).ways[w].dirty_bit == true ){
-								*time_access += MemCyc;
-								(L1->level_rows[s]).ways[w].dirty_bit = false;
-							}
-							// make line invalid in L1
-							(L1->level_rows[s]).ways[w].valid_bit == false;
-							// update LRU - make it the OLDEST, because it is invalid
-							update_LRU(1, s, w);
+				// deleted_address = (L2->level_rows[adr_set_L2]).ways[i].tag  + adr_set_L2 + adr_offset
+				unsigned long int deleted_num = 0;
+				deleted_num = (L2->level_rows[adr_set_L2]).ways[i].tag;
+				deleted_num = deleted_num << L2->set_size;
+				deleted_num = deleted_num + adr_set_L2;
+				deleted_num = deleted_num << L2->offset_size;
+				deleted_num = deleted_num + adr_offset;
+				// find set and tag for L1
+				unsigned adr_set_L1_deleted, adr_tag_L1_deleted, adr_offset_deleted;
+				find_set_tag(L1, deleted_num, &adr_offset_deleted, &adr_set_L1_deleted, &adr_tag_L1_deleted);
+								 
+				for (int w=0 ; w < L1->num_ways; w++){ // check for each way in each set
+					//check if same tag
+					if( (L1->level_rows[adr_set_L1_deleted]).ways[w].tag == adr_tag_L1_deleted ){
+						// if same tag, check if dirty
+						if ( (L1->level_rows[adr_set_L1_deleted]).ways[w].dirty_bit == true ){
+							*time_access += MemCyc;
+							(L1->level_rows[adr_set_L1_deleted]).ways[w].dirty_bit = false;
 						}
+						// make line invalid in L1
+						(L1->level_rows[adr_set_L1_deleted]).ways[w].valid_bit == false;
+						// update LRU - make it the OLDEST, because it is invalid
+						update_LRU(1, adr_set_L1_deleted, w);
 					}
 				}
 				//update tag
 				(L2->level_rows[adr_set_L2]).ways[i].tag = adr_tag_L2;
 				update_LRU(level_num, adr_set_L2, i);
-				flag_updated = true;
+				flag_updated_L2 = true;
 				break;
 			}
 		}
@@ -341,40 +339,52 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	bool flag_updated_L1 = false;
 	*time_access += L1->time_access;
 	for (int i=0; i < L1->num_ways ; i++){
-		if (L1->level_rows[adr_set_L1]).ways[i].valid_bit == false){
+		if ((L1->level_rows[adr_set_L1]).ways[i].valid_bit == false){
 			// no need to override
 			(L1->level_rows[adr_set_L1]).ways[i].tag = adr_tag_L1;
-			L1->level_rows[adr_set_L1]).ways[i].valid_bit = true;
+			(L1->level_rows[adr_set_L1]).ways[i].valid_bit = true;
 			update_LRU(level_num, adr_set_L1, i);
-			flag_updated = true;
+			flag_updated_L1 = true;
 			break;
 		} 
 	}
 	if (flag_updated_L1 == false){ // if no empty, find smallest LRU
 		for (int i=0; i < L1->num_ways ; i++){
-			if ( L1->level_rows[adr_set_L1]).ways[i].LRU_state == 0){
+			if ( (L1->level_rows[adr_set_L1]).ways[i].LRU_state == 0){
 				// override line in L1
 				//check if dirty 
-				if ( L1->level_rows[adr_set_L1]).ways[i].dirty_bit == true ){
-					*time_access += MemCyc;
+				if ( (L1->level_rows[adr_set_L1]).ways[i].dirty_bit == true ){
+					*time_access += L2->time_access;
 					(L1->level_rows[adr_set_L1]).ways[i].dirty_bit = false;
 					//find in L2 - mark dirty & update LRU
-					for( int s=0 ; s < pow(2,L2->set_size);s++){ //check for each set
-						for (int w=0 ; w < L2->num_ways; w++){ // check for each way in each set
-							//check if same tag
-							if( (L2->level_rows[s]).ways[w].tag == (L1->level_rows[adr_set_L1]).ways[i].tag ){
-								// if same tag, mark as dirty
-								(L2->level_rows[s]).ways[w].dirty_bit = true;
-								//(L2->level_rows[s]).ways[w].valid_bit == true; // NOT SURE IF NEEDED!
-								// update LRU
-								update_LRU(2, s, w);
-							}
+					unsigned long int deleted_num = 0;
+					deleted_num = (L1->level_rows[adr_set_L1]).ways[i].tag;
+					deleted_num = deleted_num << L1->set_size;
+					deleted_num = deleted_num + adr_set_L1;
+					deleted_num = deleted_num << L1->offset_size;
+					deleted_num = deleted_num + adr_offset;
+					// find set and tag for L1
+					unsigned adr_offset_deleted, adr_set_L2_deleted, adr_tag_L2_deleted;
+					find_set_tag(L2, deleted_num, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
+					for (int w=0 ; w < L2->num_ways; w++){ // check for each way in each set
+						//check if same tag
+						if( (L2->level_rows[adr_set_L2_deleted]).ways[w].tag == adr_tag_L2_deleted ){
+							// if same tag, mark as dirty
+							(L2->level_rows[adr_set_L2_deleted]).ways[w].dirty_bit = true;
+							//(L2->level_rows[s]).ways[w].valid_bit == true; // NOT SURE IF NEEDED!
+							// update LRU
+							(L2->level_rows[adr_set_L2_deleted]).ways[w].valid_bit = true;
+							update_LRU(2, adr_set_L2_deleted, w);
+						} else {
+							return -1;
 						}
 					}
+					
 				}
 				(L1->level_rows[adr_set_L1]).ways[i].tag = adr_tag_L1;
+				(L1->level_rows[adr_set_L1]).ways[i].valid_bit = true;
 				update_LRU(level_num, adr_set_L1, i);
-				flag_updated = true;
+				flag_updated_L1 = true;
 				break;
 			}
 		}
@@ -384,6 +394,32 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	return 0;
 }
 	
+/*
+ * find_set_tag - find offset, set and tag of level L according to adress num
+ * param[out] adr_offset, adr_set,adr_tag  - offset, set and tag of address (according to sizes of level)
+ * 
+*/
+void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag){
+	// mask all one's
+	unsigned adr_mask = -1;
+	// ones only where offset is supposed to be
+	adr_mask = adr_mask >> (32 - L->offset_size);
+	*adr_offset = num & adr_mask ;
+	//set of address
+	unsigned num_shift = num >> L->offset_size;
+	adr_mask = -1;
+	adr_mask = adr_mask >> (32 - L->set_size);
+	*adr_set = num_shift & adr_mask;
+
+	//tag address
+	unsigned num_shift_tag = num_shift >> L->set_size;
+	unsigned adr_mask_tag = -1;
+	adr_mask_tag = adr_mask >> (32 - L->tag_size);
+	*adr_tag = num_shift_tag & adr_mask_tag;
+
+	return;
+}
+
 	
 int hit(unsigned adr_set, unsigned way_num, unsigned level_num, double *time_access){
 	//hit read:
@@ -400,29 +436,29 @@ int hit(unsigned adr_set, unsigned way_num, unsigned level_num, double *time_acc
 
 void update_LRU(unsigned level_num, unsigned adr_set, unsigned curr_way){
 	if (level_num == 1){
-		if ( L1->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
-			L1->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
+		if ( (L1->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
+			(L1->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
 			return;
 		}
-		int counter = L1->level_rows[adr_set]).ways[curr_way].LRU_state;
-		L1->level_rows[adr_set]).ways[curr_way].LRU_state = L1->num_ways - 1; // biggest LRU state = newest
+		int counter = (L1->level_rows[adr_set]).ways[curr_way].LRU_state;
+		(L1->level_rows[adr_set]).ways[curr_way].LRU_state = L1->num_ways - 1; // biggest LRU state = newest
 		for (int i=0; i < L1->num_ways ; i++){
 			// update LRU
 			if ( (i != curr_way) && ((L1->level_rows[adr_set]).ways[i].LRU_state > counter)){
-				L1->level_rows[adr_set]).ways[i].LRU_state--;
+				(L1->level_rows[adr_set]).ways[i].LRU_state--;
 			}
 		}
 	} else if (level_num == 2){
-		if ( L2->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
-			L2->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
+		if ( (L2->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
+			(L2->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
 			return;
 		}
-		int counter = L2->level_rows[adr_set]).ways[curr_way].LRU_state;
-		L2->level_rows[adr_set]).ways[curr_way].LRU_state = L2->num_ways - 1;
+		int counter = (L2->level_rows[adr_set]).ways[curr_way].LRU_state;
+		(L2->level_rows[adr_set]).ways[curr_way].LRU_state = L2->num_ways - 1;
 		for (int i=0; i < L2->num_ways ; i++){
 			// update LRU
 			if ( (i != curr_way) && (L2->level_rows[adr_set]).ways[i].LRU_state > counter){
-				L2->level_rows[adr_set]).ways[i].LRU_state--;
+				(L2->level_rows[adr_set]).ways[i].LRU_state--;
 			}
 		}
 	}
