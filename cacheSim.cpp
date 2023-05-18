@@ -45,9 +45,11 @@ one_level *L2;
 int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc,
 			unsigned L2Assoc,unsigned L1Cyc,unsigned L2Cyc,unsigned WrAlloc);
 int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc);
+int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc);
 void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag);
-int hit(unsigned adr_set, unsigned way_num, unsigned level_num, double *time_access);
-void update_LRU(unsigned level_num, unsigned adr_set, unsigned curr_way);
+int hit(one_level* L, unsigned adr_set, unsigned way_num, double *time_access);
+void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way);
+
 int main(int argc, char **argv) {
 
 	if (argc < 19) {
@@ -96,8 +98,6 @@ int main(int argc, char **argv) {
 			return 0;
 		}
 	}
-	
-	
 
 	if(init_cache(BSize,L1Size, L2Size, L1Assoc, L2Assoc, L1Cyc, L2Cyc, WrAlloc) == -1) 
 		return -1;
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
 		}
 		// treating write case
 		else if (operation == 'w') {
-			//write_func(&time_access,&L1_miss_num,&L2_miss_num, num);
+			write_func(&time_access,&L1_miss_num,&L2_miss_num, num, MemCyc);
 		}
 		else
 		{
@@ -158,6 +158,54 @@ int main(int argc, char **argv) {
 	printf("AccTimeAvg=%.03f\n", avgAccTime);
 
 	return 0;
+}
+
+
+int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc){
+	unsigned adr_offset, adr_set_L1, adr_set_L2, adr_tag_L1, adr_tag_L2;
+	find_set_tag(L1, num, &adr_offset, &adr_set_L1, &adr_tag_L1);
+	find_set_tag(L2, num, &adr_offset, &adr_set_L2, &adr_tag_L2);
+	
+	//check tag of L1
+	for (int i=0; i < L1->num_ways ; i++){
+		if ( (adr_tag_L1 == (L1->level_rows[adr_set_L1]).ways[i].tag) &&
+				((L1->level_rows[adr_set_L1]).ways[i].valid_bit == 1) ){
+			//hit write:
+			// update LRU
+			// update time access
+			if ( hit(L1, adr_set_L1, i, time_access) != 0)
+				return -1;
+			// mark as dirty
+			(L1->level_rows[adr_set_L1]).ways[i].dirty_bit = true;
+			return 0;
+		}
+	}
+	
+	//check tag of L2
+	for (int i=0; i < L2->num_ways ; i++){
+		if ( (adr_tag_L2 == (L2->level_rows[adr_set_L2]).ways[i].tag) &&
+			((L2->level_rows[adr_set_L2]).ways[i].valid_bit == 1) ) {
+			// update LRU + time access
+			if ( hit(L2, adr_set_L2, i, time_access) != 0)
+				return -1;
+			
+			
+			
+			
+			//hit write:
+			// update LRU
+			// update time access
+			
+			// mark as dirty
+			(L2->level_rows[adr_set_L2]).ways[i].dirty_bit = true;
+			return 0;
+		}
+	}
+	
+	
+	
+	
+	
 }
 
 
@@ -247,27 +295,25 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	find_set_tag(L2, num, &adr_offset, &adr_set_L2, &adr_tag_L2);
 		
 	//check tag of L1
-	int level_num = 1;
 	for (int i=0; i < L1->num_ways ; i++){
 		if ( (adr_tag_L1 == (L1->level_rows[adr_set_L1]).ways[i].tag) &&
 				((L1->level_rows[adr_set_L1]).ways[i].valid_bit == 1) ){
 			//hit read:
 			// update LRU
 			// update time access
-			if ( hit(adr_set_L1, i, level_num, time_access) != 0)
+			if ( hit(L1, adr_set_L1, i, time_access) != 0)
 				return -1;
 			return 0;
 		}
 	}
 	//check tag of L2
-	level_num = 2;
 	for (int i=0; i < L2->num_ways ; i++){
 		if ( (adr_tag_L2 == (L2->level_rows[adr_set_L2]).ways[i].tag) &&
 			((L2->level_rows[adr_set_L2]).ways[i].valid_bit == 1) ) {
 			//hit read:
 			// update LRU
 			// update time access
-			if ( hit(adr_set_L2, i, level_num, time_access) != 0)
+			if ( hit(L2, adr_set_L2, i, time_access) != 0)
 				return -1;
 			return 0;
 		}
@@ -276,14 +322,13 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	//read MISS:
 	// to memory
 	// bring to L2 - update tag
-	level_num = 2;
 	bool flag_updated_L2 = false;
 	*time_access += MemCyc + L2->time_access;
 	for (int i=0; i < L2->num_ways ; i++){ // check if empty space
 		if ( (L2->level_rows[adr_set_L2]).ways[i].valid_bit == false){
 			(L2->level_rows[adr_set_L2]).ways[i].tag = adr_tag_L2;
 			(L2->level_rows[adr_set_L2]).ways[i].valid_bit = true;
-			update_LRU(level_num, adr_set_L2, i);
+			update_LRU(L2, adr_set_L2, i);
 			flag_updated_L2 = true;
 			break;
 		} 
@@ -321,12 +366,12 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 						// make line invalid in L1
 						(L1->level_rows[adr_set_L1_deleted]).ways[w].valid_bit == false;
 						// update LRU - make it the OLDEST, because it is invalid
-						update_LRU(1, adr_set_L1_deleted, w);
+						update_LRU(L1, adr_set_L1_deleted, w);
 					}
 				}
 				//update tag
 				(L2->level_rows[adr_set_L2]).ways[i].tag = adr_tag_L2;
-				update_LRU(level_num, adr_set_L2, i);
+				update_LRU(L2, adr_set_L2, i);
 				flag_updated_L2 = true;
 				break;
 			}
@@ -335,7 +380,6 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	
 	
 	// bring to L1 - update tag
-	level_num = 1;
 	bool flag_updated_L1 = false;
 	*time_access += L1->time_access;
 	for (int i=0; i < L1->num_ways ; i++){
@@ -343,7 +387,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			// no need to override
 			(L1->level_rows[adr_set_L1]).ways[i].tag = adr_tag_L1;
 			(L1->level_rows[adr_set_L1]).ways[i].valid_bit = true;
-			update_LRU(level_num, adr_set_L1, i);
+			update_LRU(L1, adr_set_L1, i);
 			flag_updated_L1 = true;
 			break;
 		} 
@@ -374,7 +418,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 							//(L2->level_rows[s]).ways[w].valid_bit == true; // NOT SURE IF NEEDED!
 							// update LRU
 							(L2->level_rows[adr_set_L2_deleted]).ways[w].valid_bit = true;
-							update_LRU(2, adr_set_L2_deleted, w);
+							update_LRU(L2, adr_set_L2_deleted, w);
 						} else {
 							return -1;
 						}
@@ -383,7 +427,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 				}
 				(L1->level_rows[adr_set_L1]).ways[i].tag = adr_tag_L1;
 				(L1->level_rows[adr_set_L1]).ways[i].valid_bit = true;
-				update_LRU(level_num, adr_set_L1, i);
+				update_LRU(L1, adr_set_L1, i);
 				flag_updated_L1 = true;
 				break;
 			}
@@ -394,6 +438,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	return 0;
 }
 	
+
 /*
  * find_set_tag - find offset, set and tag of level L according to adress num
  * param[out] adr_offset, adr_set,adr_tag  - offset, set and tag of address (according to sizes of level)
@@ -421,46 +466,28 @@ void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, uns
 }
 
 	
-int hit(unsigned adr_set, unsigned way_num, unsigned level_num, double *time_access){
+int hit(one_level* L, unsigned adr_set, unsigned way_num, double *time_access){
 	//hit read:
 	// update LRU
-	update_LRU(level_num, adr_set, way_num);
+	update_LRU(L, adr_set, way_num);
 	// update time access
-	if (level_num == 1){		
-		*time_access += L1->time_access;
-	} else if (level_num == 2){
-		*time_access += L2->time_access;
-	}
+	*time_access += L->time_access;
 	return 0;
 }
 
-void update_LRU(unsigned level_num, unsigned adr_set, unsigned curr_way){
-	if (level_num == 1){
-		if ( (L1->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
-			(L1->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
-			return;
-		}
-		int counter = (L1->level_rows[adr_set]).ways[curr_way].LRU_state;
-		(L1->level_rows[adr_set]).ways[curr_way].LRU_state = L1->num_ways - 1; // biggest LRU state = newest
-		for (int i=0; i < L1->num_ways ; i++){
-			// update LRU
-			if ( (i != curr_way) && ((L1->level_rows[adr_set]).ways[i].LRU_state > counter)){
-				(L1->level_rows[adr_set]).ways[i].LRU_state--;
-			}
-		}
-	} else if (level_num == 2){
-		if ( (L2->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
-			(L2->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
-			return;
-		}
-		int counter = (L2->level_rows[adr_set]).ways[curr_way].LRU_state;
-		(L2->level_rows[adr_set]).ways[curr_way].LRU_state = L2->num_ways - 1;
-		for (int i=0; i < L2->num_ways ; i++){
-			// update LRU
-			if ( (i != curr_way) && (L2->level_rows[adr_set]).ways[i].LRU_state > counter){
-				(L2->level_rows[adr_set]).ways[i].LRU_state--;
-			}
+void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way){
+	if ( (L->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
+		(L->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
+		return;
+	}
+	int counter = (L->level_rows[adr_set]).ways[curr_way].LRU_state;
+	(L->level_rows[adr_set]).ways[curr_way].LRU_state = L->num_ways - 1; // biggest LRU state = newest
+	for (int i=0; i < L1->num_ways ; i++){
+		// update LRU
+		if ( (i != curr_way) && ((L->level_rows[adr_set]).ways[i].LRU_state > counter)){
+			(L->level_rows[adr_set]).ways[i].LRU_state--;
 		}
 	}
+	
 	return;
 }
