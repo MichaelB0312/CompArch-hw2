@@ -50,7 +50,8 @@ void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, uns
 int hit(one_level* L, unsigned adr_set, unsigned way_num, double *time_access);
 void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way);
 unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned adr_set,unsigned adr_tag);
-
+unsigned way_to_evict(one_level* L, unsigned set);
+unsigned way_to_evict_LRU(one_level* L, unsigned set);
 
 int main(int argc, char **argv) {
 
