@@ -459,7 +459,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
 			//find in L2 - mark dirty & update LRU
 			unsigned deleted_num = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
-			unsigned adr_set_L1_deleted, adr_tag_L1_deleted, adr_offset_deleted;
+			unsigned adr_set_L2_deleted, adr_tag_L2_deleted, adr_offset_deleted;
 			find_set_tag(L2, deleted_num, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
 
 			unsigned way_to_evict_L2 = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
