@@ -52,6 +52,7 @@ void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way);
 unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned adr_set,unsigned adr_tag);
 unsigned way_to_evict(one_level* L, unsigned set);
 unsigned way_to_evict_LRU(one_level* L, unsigned set);
+unsigned find_way_of_tag(one_level* L, unsigned set, unsigned tag);
 
 int main(int argc, char **argv) {
 
@@ -248,7 +249,7 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 			// update time access
 			
 			// mark as dirty
-			(L2->level_rows[adr_set_L2]).ways[i].dirty_bit = true;
+			(L2->level_rows[adr_set_L2]).ways[hit2_way].dirty_bit = true;
 			return 0;
 		}
 	}
@@ -314,7 +315,7 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 
 unsigned way_to_evict(one_level* L, unsigned set) {
 	for (int empty_way = 0; empty_way < L->num_ways; empty_way++) {
-		if (L->level_rows[set]).ways[empty_way].valid_bit == 0) {
+		if ((L->level_rows[set]).ways[empty_way].valid_bit == 0) {
 			return empty_way;
 		}
 	}
@@ -323,7 +324,7 @@ unsigned way_to_evict(one_level* L, unsigned set) {
 
 unsigned way_to_evict_LRU(one_level* L, unsigned set) {
 	for (int evicted_way = 0; evicted_way < L->num_ways; evicted_way++) {
-		if (L->level_rows[set]).ways[evicted_way].LRU == 0) {
+		if ((L->level_rows[set]).ways[evicted_way].LRU_state == 0) {
 			return evicted_way;
 		}
 	}
@@ -368,14 +369,12 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 	int num_rows1_per_way = (L1Size/BSize_pow)/L1Assoc;
 	int num_rows2_per_way = (L2Size/BSize_pow)/L2Assoc;
 		
-	if((L1Assoc << 31) != 0) return -1; //check if divides into 2
+	if(((L1Assoc << 31) != 0) && (L1Assoc != 1)) return -1; //check if divides into 2
 	L1->num_ways = L1Assoc;
-	if((L2Assoc << 31) != 0) return -1; //check if divides into 2
+	if(((L2Assoc << 31) != 0) && (L2Assoc != 1)) return -1; //check if divides into 2
 	L2->num_ways = L2Assoc;
 		
-	if(num_rows1_per_way%L1Assoc != 0) return -1;
 	L1->level_rows = new level_row[num_rows1_per_way];
-	if(num_rows2_per_way%L2Assoc != 0) return -1;
 	L2->level_rows = new level_row[num_rows2_per_way];
 	if(!(L1->level_rows) || !(L2->level_rows)) return -1;
 	
@@ -620,7 +619,7 @@ void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way){
 	// removed place, make LRU = 0
 	if ( (L->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
 		(L->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
-		return curr_way;
+		return;
 	}
 	// newest place in curr way, update states of LRU
 	int counter = (L->level_rows[adr_set]).ways[curr_way].LRU_state;
