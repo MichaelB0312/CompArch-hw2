@@ -225,9 +225,9 @@ int main(int argc, char **argv) {
 		instr_num++;
 	}
 
-	double L1MissRate;
-	double L2MissRate;
-	double avgAccTime;
+	double L1MissRate = (double)L1_miss_num/instr_num;
+	double L2MissRate = (double)L2_miss_num/instr_num;
+	double avgAccTime = time_access/instr_num;
 
 	printf("L1miss=%.03f ", L1MissRate);
 	printf("L2miss=%.03f ", L2MissRate);
@@ -418,11 +418,11 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			if (way_to_evict_L1 == -1) { //no empty space, find smallest LRU
 				way_to_evict_L1 = way_to_evict_LRU(L1, adr_set_L1);
 				if ((L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit == true) { // check if dirty
-					*time_access += MemCyc;
+					//*time_access += MemCyc;- no need because isnt M
 					(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
 					//find in L2 - mark dirty & update LRU
 					unsigned deleted_num = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
-					unsigned adr_set_L1_deleted, adr_tag_L1_deleted, adr_offset_deleted;
+					unsigned adr_set_L2_deleted, adr_tag_L2_deleted, adr_offset_deleted;
 					find_set_tag(L2, deleted_num, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
 
 					unsigned way_to_evict_L2 = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
@@ -542,20 +542,26 @@ unsigned way_to_evict_LRU(one_level* L, unsigned set) {
 */
 void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag){
 	// mask all one's
-	unsigned adr_mask = -1;
+	//unsigned adr_mask = -1;
 	// ones only where offset is supposed to be
-	adr_mask = adr_mask >> (32 - L->offset_size);
+	//adr_mask = adr_mask >> (32 - L->offset_size);
+	unsigned adr_mask = pow(2,L->offset_size) - 1;
 	*adr_offset = num & adr_mask ;
+
+
 	//set of address
 	unsigned num_shift = num >> L->offset_size;
-	adr_mask = -1;
-	adr_mask = adr_mask >> (32 - L->set_size);
-	*adr_set = num_shift & adr_mask;
+	//unsigned adr_mask_set = -1;
+	//adr_mask_set = adr_mask_set >> (32 - L->set_size);
+	unsigned adr_mask_set = pow(2,L->set_size) - 1;
+	*adr_set = num_shift & adr_mask_set;
 
 	//tag address
 	unsigned num_shift_tag = num_shift >> L->set_size;
-	unsigned adr_mask_tag = -1;
-	adr_mask_tag = adr_mask >> (32 - L->tag_size);
+	//unsigned adr_mask_tag = -1;
+	//adr_mask_tag = adr_mask >> (32 - L->tag_size);
+	
+	unsigned adr_mask_tag = pow(2,L->tag_size) - 1;
 	*adr_tag = num_shift_tag & adr_mask_tag;
 
 	return;
