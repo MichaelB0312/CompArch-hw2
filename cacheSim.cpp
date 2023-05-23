@@ -327,7 +327,7 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 		if (way_to_evict_L2 == -1) { // need to remove from L2
 			way_to_evict_L2 = way_to_evict_LRU(L2, adr_set_L2);
 			if ((L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit == true) {
-				*time_access += MemCyc;
+				//*time_access += MemCyc;
 				(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = false;
 			}
 			(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = false;
@@ -374,8 +374,6 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 		update_LRU(L1, adr_set_L1_deleted, way_to_evict_L1);
 		*time_access += L1->time_access;
 	}
-	
-	
 }
 
 /*
