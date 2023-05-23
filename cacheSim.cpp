@@ -350,6 +350,7 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
 		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = true; // not in graph!
 		update_LRU(L2, adr_set_L2, way_to_evict_L2);
+		*time_access += L2->time_access;
 
 		//is write allocate
 		// find set and tag for L1 of M
@@ -371,6 +372,7 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 		(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].valid_bit = true;
 		(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit = true;
 		update_LRU(L1, adr_set_L1_deleted, way_to_evict_L1);
+		*time_access += L1->time_access;
 	}
 	
 	
@@ -449,12 +451,12 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	*L2_miss_num += 1;
 	// to memory
 	// bring to L2 - update tag
-	*time_access += MemCyc + L2->time_access;
+	*time_access += MemCyc + L2->time_access + L1->time_access;
 	unsigned way_to_evict_L2 = way_to_evict(L2, adr_set_L2);
 	if (way_to_evict_L2 == -1){ // if no empty, find smallest LRU
 		way_to_evict_L2 = way_to_evict_LRU(L2, adr_set_L2);
 		if ((L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit == true) {
-			*time_access += MemCyc;
+			//*time_access += MemCyc;
 			(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = false;
 		}
 		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
@@ -466,7 +468,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 		unsigned way_to_evict_L1 = find_way_of_tag(L1, adr_set_L1_deleted, adr_tag_L1_deleted);
 		if (way_to_evict_L1 != -1) { //the line of found way from evict LRU in L2 is in L1
 			if ((L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit == true) {
-				*time_access += MemCyc; //NOT SURE!!
+				//*time_access += MemCyc; //NOT SURE!!
 				(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit = false;
 			}
 			(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].valid_bit = false;
@@ -480,12 +482,12 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 	
 	
 	// bring to L1 - update tag
-	*time_access += L1->time_access;
+	//*time_access += L1->time_access;
 	unsigned way_to_evict_L1 = way_to_evict(L1, adr_set_L1); // check if empty space in L1
 	if (way_to_evict_L1 == -1) { //no empty space, find smallest LRU
 		way_to_evict_L1 = way_to_evict_LRU(L1, adr_set_L1);
 		if ((L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit == true) { // check if dirty
-			*time_access += MemCyc;
+			//*time_access += MemCyc;
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
 			//find in L2 - mark dirty & update LRU
 			unsigned deleted_num = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
