@@ -411,6 +411,36 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			// update time access
 			if ( hit(L2, adr_set_L2, i, time_access) != 0)
 				return -1;
+
+			// bring to L1 - update tag
+			*time_access += L1->time_access;
+			unsigned way_to_evict_L1 = way_to_evict(L1, adr_set_L1); // check if empty space in L1
+			if (way_to_evict_L1 == -1) { //no empty space, find smallest LRU
+				way_to_evict_L1 = way_to_evict_LRU(L1, adr_set_L1);
+				if ((L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit == true) { // check if dirty
+					*time_access += MemCyc;
+					(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
+					//find in L2 - mark dirty & update LRU
+					unsigned deleted_num = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
+					unsigned adr_set_L1_deleted, adr_tag_L1_deleted, adr_offset_deleted;
+					find_set_tag(L2, deleted_num, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
+
+					unsigned way_to_evict_L2 = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
+					if (way_to_evict_L2 != -1) { //the line of found way from evict LRU in L1 is in L2 -- MUST BE
+						// if same tag, mark as dirty
+						(L2->level_rows[adr_set_L2_deleted]).ways[way_to_evict_L2].dirty_bit = true;
+						//(L2->level_rows[s]).ways[w].valid_bit == true; // NOT SURE IF NEEDED!
+						// update LRU
+						(L2->level_rows[adr_set_L2_deleted]).ways[way_to_evict_L2].valid_bit = true;
+						update_LRU(L2, adr_set_L2_deleted, way_to_evict_L2);
+					}
+				}
+
+			}
+			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag = adr_tag_L1;
+			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].valid_bit = true;
+			update_LRU(L1, adr_set_L1, way_to_evict_L1);
+
 			return 0;
 		}
 	}
