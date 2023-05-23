@@ -259,11 +259,13 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 				return -1;
 			// mark as dirty
 			(L1->level_rows[adr_set_L1]).ways[i].dirty_bit = true;
+			printf("L1 HIT");
 			return 0;
 		}
 	}
 	
 	*L1_miss_num += 1;
+	printf("L1 MISS");
 	//check tag of L2  - HIT L2
 	for (int hit2_way = 0; hit2_way < L2->num_ways ; hit2_way++){
 		if ( (adr_tag_L2 == (L2->level_rows[adr_set_L2]).ways[hit2_way].tag) &&
@@ -313,12 +315,14 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 			
 			// mark as dirty
 			(L2->level_rows[adr_set_L2]).ways[hit2_way].dirty_bit = true;
+			printf("L2 HIT");
 			return 0;
 		}
 	}
 
 	// write MISS
 	*L2_miss_num += 1;
+	printf("L2 MISS");
 	if (!(L2->is_write_allocate)) {
 		*time_access += MemCyc;
 	}
@@ -398,11 +402,13 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			// update time access
 			if ( hit(L1, adr_set_L1, i, time_access) != 0)
 				return -1;
+			printf("L1 hit ");
 			return 0;
 		}
 	}
 	//check tag of L2
 	*L1_miss_num += 1;
+	printf("L1 MISS ");
 	for (int i=0; i < L2->num_ways ; i++){
 		if ( (adr_tag_L2 == (L2->level_rows[adr_set_L2]).ways[i].tag) &&
 			((L2->level_rows[adr_set_L2]).ways[i].valid_bit == 1) ) {
@@ -440,13 +446,14 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag = adr_tag_L1;
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].valid_bit = true;
 			update_LRU(L1, adr_set_L1, way_to_evict_L1);
-
+			printf("L2 Hit ");
 			return 0;
 		}
 	}
 	
 	//read MISS:
 	*L2_miss_num += 1;
+	printf("L2 MISS ");
 	// to memory
 	// bring to L2 - update tag
 	*time_access += MemCyc + L2->time_access + L1->time_access;
