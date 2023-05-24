@@ -222,6 +222,8 @@ int main(int argc, char **argv) {
 			return -1;
 		}
 
+		cout << " valid bit of L1 0 " << (L1->level_rows[0]).ways[0].valid_bit << endl;
+		cout << " valid bit of L1 0 " << (L1->level_rows[0]).ways[1].valid_bit << endl;
 		instr_num++;
 	}
 
