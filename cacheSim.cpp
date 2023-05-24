@@ -481,6 +481,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 		}
 	}
 	// write to L2 and update LRU
+	printf("way L2 is %u, set is %u \n", way_to_evict_L2, adr_set_L2);
 	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].tag = adr_tag_L2;
 	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
 	update_LRU(L2, adr_set_L2, way_to_evict_L2);
@@ -513,6 +514,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 		}
 
 	}
+	printf("way L1 is %u, set is %u \n", way_to_evict_L1, adr_set_L1);
 	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag = adr_tag_L1;
 	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].valid_bit = true;
 	update_LRU(L1, adr_set_L1, way_to_evict_L1);
