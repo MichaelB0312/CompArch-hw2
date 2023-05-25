@@ -44,8 +44,8 @@ one_level *L2;
 	
 int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc,
 			unsigned L2Assoc,unsigned L1Cyc,unsigned L2Cyc,unsigned WrAlloc);
-int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc);
-int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc);
+int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num, unsigned long int num, unsigned MemCyc);
+int write_func(double *time_access, double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num, unsigned long int num, unsigned MemCyc);
 void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag);
 int hit(one_level* L, unsigned adr_set, unsigned way_num, double *time_access);
 void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way);
@@ -178,9 +178,10 @@ int main(int argc, char **argv) {
 	if(init_cache(BSize,L1Size, L2Size, L1Assoc, L2Assoc, L1Cyc, L2Cyc, WrAlloc) == -1) 
 		return -1;
 
-	int instr_num = 0; //count number of input instructions
+	double instr_num = 0; //count number of input instructions
 	double time_access = 0.0;//total missing time
-	int	L1_miss_num = 0, L2_miss_num = 0;
+	double	L1_miss_num = 0, L2_miss_num = 0;
+	double	L1_hit_num = 0, L2_hit_num = 0;
 	
 	while (getline(file, line)) {
 
@@ -211,25 +212,26 @@ int main(int argc, char **argv) {
 		
 		//treating read case:
 		if (operation == 'r') {
-			read_func(&time_access,&L1_miss_num,&L2_miss_num, num, MemCyc);
+			read_func(&time_access,&L1_miss_num,&L2_miss_num, &L1_hit_num,&L2_hit_num, num, MemCyc);
 		}
 		// treating write case
 		else if (operation == 'w') {
-			write_func(&time_access,&L1_miss_num,&L2_miss_num, num, MemCyc);
+			write_func(&time_access,&L1_miss_num,&L2_miss_num, &L1_hit_num,&L2_hit_num, num, MemCyc);
 		}
 		else
 		{
 			return -1;
 		}
 
-		cout << " valid bit of L1 0 " << (L1->level_rows[0]).ways[0].valid_bit << endl;
-		cout << " valid bit of L1 0 " << (L1->level_rows[0]).ways[1].valid_bit << endl;
+		//cout << " valid bit of L1 0 " << (L1->level_rows[0]).ways[0].valid_bit << endl;
+		//cout << " valid bit of L1 0 " << (L1->level_rows[0]).ways[1].valid_bit << endl;
 		instr_num++;
 	}
 
-	double L1MissRate = (double)L1_miss_num/instr_num;
-	double L2MissRate = (double)L2_miss_num/instr_num;
-	double avgAccTime = time_access/instr_num;
+	double L1MissRate = (double)L1_miss_num/(L1_miss_num + L1_hit_num);
+	double L2MissRate = (double)L2_miss_num/(L2_miss_num + L2_hit_num);
+	double avgAccTime = (L1Cyc*L1_hit_num) + (L1_miss_num*(L1Cyc+L2Cyc)) + (L2_miss_num*MemCyc) ;
+	avgAccTime = avgAccTime/instr_num;
 
 	printf("L1miss=%.03f ", L1MissRate);
 	printf("L2miss=%.03f ", L2MissRate);
@@ -245,7 +247,7 @@ int main(int argc, char **argv) {
  * param[out] L2,L1_miss_num - increase it if there is a miss in L2,L1 cache
  *
 */
-int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc){
+int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num,unsigned long int num, unsigned MemCyc){
 	unsigned adr_offset, adr_set_L1, adr_set_L2, adr_tag_L1, adr_tag_L2;
 	find_set_tag(L1, num, &adr_offset, &adr_set_L1, &adr_tag_L1);
 	find_set_tag(L2, num, &adr_offset, &adr_set_L2, &adr_tag_L2);
@@ -261,13 +263,14 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 				return -1;
 			// mark as dirty
 			(L1->level_rows[adr_set_L1]).ways[i].dirty_bit = true;
-			printf("L1 HIT \n");
+			*L1_hit_num += 1;
+			//printf("L1 HIT \n");
 			return 0;
 		}
 	}
 	
 	*L1_miss_num += 1;
-	printf("L1 MISS \n");
+	//printf("L1 MISS \n");
 	//check tag of L2  - HIT L2
 	for (int hit2_way = 0; hit2_way < L2->num_ways ; hit2_way++){
 		if ( (adr_tag_L2 == (L2->level_rows[adr_set_L2]).ways[hit2_way].tag) &&
@@ -317,14 +320,15 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
 			
 			// mark as dirty
 			(L2->level_rows[adr_set_L2]).ways[hit2_way].dirty_bit = true;
-			printf("L2 HIT \n");
+			*L2_hit_num += 1;
+			//printf("L2 HIT \n");
 			return 0;
 		}
 	}
 
 	// write MISS
 	*L2_miss_num += 1;
-	printf("L2 MISS \n");
+	//printf("L2 MISS \n");
 	if (!(L2->is_write_allocate)) {
 		*time_access += MemCyc;
 	}
@@ -388,7 +392,7 @@ int write_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned l
  * param[out] L2,L1_miss_num - increase it if there is a miss in L2,L1 cache
  * 
 */
-int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned long int num, unsigned MemCyc) {
+int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num, unsigned long int num, unsigned MemCyc) {
 	
 	unsigned adr_offset, adr_set_L1, adr_set_L2, adr_tag_L1, adr_tag_L2;
 	
@@ -404,13 +408,14 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			// update time access
 			if ( hit(L1, adr_set_L1, i, time_access) != 0)
 				return -1;
-			printf("L1 hit \n");
+			*L1_hit_num += 1;
+			//printf("L1 hit \n");
 			return 0;
 		}
 	}
 	//check tag of L2
 	*L1_miss_num += 1;
-	printf("L1 MISS \n");
+	//printf("L1 MISS \n");
 	for (int i=0; i < L2->num_ways ; i++){
 		if ( (adr_tag_L2 == (L2->level_rows[adr_set_L2]).ways[i].tag) &&
 			((L2->level_rows[adr_set_L2]).ways[i].valid_bit == 1) ) {
@@ -448,14 +453,15 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag = adr_tag_L1;
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].valid_bit = true;
 			update_LRU(L1, adr_set_L1, way_to_evict_L1);
-			printf("L2 Hit \n");
+			*L2_hit_num += 1;
+			//printf("L2 Hit \n");
 			return 0;
 		}
 	}
 	
 	//read MISS:
 	*L2_miss_num += 1;
-	printf("L2 MISS \n");
+	//printf("L2 MISS \n");
 	// to memory
 	// bring to L2 - update tag
 	*time_access += MemCyc + L2->time_access + L1->time_access;
@@ -483,7 +489,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 		}
 	}
 	// write to L2 and update LRU
-	printf("way L2 is %u, set is %u \n", way_to_evict_L2, adr_set_L2);
+	//printf("way L2 is %u, set is %u \n", way_to_evict_L2, adr_set_L2);
 	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].tag = adr_tag_L2;
 	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
 	update_LRU(L2, adr_set_L2, way_to_evict_L2);
@@ -516,7 +522,7 @@ int read_func(double *time_access,int *L1_miss_num,int *L2_miss_num, unsigned lo
 		}
 
 	}
-	printf("way L1 is %u, set is %u \n", way_to_evict_L1, adr_set_L1);
+	//printf("way L1 is %u, set is %u \n", way_to_evict_L1, adr_set_L1);
 	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag = adr_tag_L1;
 	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].valid_bit = true;
 	update_LRU(L1, adr_set_L1, way_to_evict_L1);
