@@ -118,9 +118,9 @@ int init_cache(unsigned BSize, unsigned L1Size, unsigned L2Size, unsigned L1Asso
 	L2->tag_size = 32 - (BSize + log2(num_rows2_per_way));
 
 	for (int i = 0; i < num_rows2_per_way; i++) {
-		(L2->level_rows[i]).ways = new way[L1Assoc];
+		(L2->level_rows[i]).ways = new way[L2Assoc];
 		if (!((L2->level_rows[i]).ways)) return -1;
-		memset((L2->level_rows[i]).ways, 0, sizeof(way) * L1Assoc);
+		memset((L2->level_rows[i]).ways, 0, sizeof(way) * L2Assoc);
 	}
 
 	return 0;
@@ -619,13 +619,21 @@ unsigned find_way_of_tag(one_level* L, unsigned set, unsigned tag){
 
 
 void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way){
+	int counter = (L->level_rows[adr_set]).ways[curr_way].LRU_state;
 	// removed place, make LRU = 0
 	if ( (L->level_rows[adr_set]).ways[curr_way].valid_bit == false ){
-		(L->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
-		return;
+		for (int i=0; i < L->num_ways ; i++){
+			if ( i == curr_way ){
+				(L->level_rows[adr_set]).ways[curr_way].LRU_state = 0;
+			} else if ((counter >  (L->level_rows[adr_set]).ways[i].LRU_state) &&
+					 (L->level_rows[adr_set]).ways[i].valid_bit ){
+				(L->level_rows[adr_set]).ways[i].LRU_state ++;
+			}
+			return;
+		}
 	}
 	// newest place in curr way, update states of LRU
-	int counter = (L->level_rows[adr_set]).ways[curr_way].LRU_state;
+
 	(L->level_rows[adr_set]).ways[curr_way].LRU_state = L->num_ways - 1; // biggest LRU state = newest
 	for (int i=0; i < L->num_ways ; i++){
 		// update LRU
