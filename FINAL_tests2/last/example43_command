@@ -1,0 +1,1 @@
+--mem-cyc 186 --bsize 4 --wr-alloc 0 --l1-size 8 --l1-assoc 0 --l1-cyc 30 --l2-size 12 --l2-assoc 8 --l2-cyc 25

@@ -1,0 +1,1 @@
+L1miss=0.877 L2miss=0.696 AccTimeAvg=71.613
