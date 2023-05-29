@@ -1,5 +1,5 @@
 /* 046267 Computer Architecture - Winter 20/21 - HW #2 */
-/* Johanna Boukris 332647718 ; Michael */
+/* Johanna Boukris 332647718 ; Michael Berko 206013914 */
 
 #include <cstdlib>
 #include <iostream>
