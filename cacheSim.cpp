@@ -16,7 +16,7 @@ using std::ifstream;
 using std::stringstream;	
 	
 typedef struct {
-	unsigned tag;
+	unsigned long int tag;
 	unsigned LRU_state;
 	bool valid_bit;
 	bool dirty_bit;
@@ -46,13 +46,13 @@ int init_cache(unsigned BSize,unsigned L1Size, unsigned L2Size, unsigned L1Assoc
 			unsigned L2Assoc,unsigned L1Cyc,unsigned L2Cyc,unsigned WrAlloc);
 int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num, unsigned long int num, unsigned MemCyc);
 int write_func(double *time_access, double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num, unsigned long int num, unsigned MemCyc);
-void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag);
+void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned long int *adr_tag);
 void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way);
-unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned adr_set,unsigned adr_tag);
+unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned adr_set,unsigned long int adr_tag);
 unsigned way_to_evict(one_level* L, unsigned set);
 unsigned way_to_evict_LRU(one_level* L, unsigned set);
-unsigned find_way_of_tag(one_level* L, unsigned set, unsigned tag);
-int way_of_hit(one_level* L, unsigned set, unsigned tag);
+unsigned find_way_of_tag(one_level* L, unsigned set, unsigned long int tag);
+int way_of_hit(one_level* L, unsigned set, unsigned long int tag);
 
 int init_cache(unsigned BSize, unsigned L1Size, unsigned L2Size, unsigned L1Assoc,
 	unsigned L2Assoc, unsigned L1Cyc, unsigned L2Cyc, unsigned WrAlloc) {
@@ -212,19 +212,19 @@ int main(int argc, char **argv) {
 		}
 
 		// DEBUG - remove this line
-		cout << "operation: " << operation;
+		//cout << "operation: " << operation;
 
 		string cutAddress = address.substr(2); // Removing the "0x" part of the address
 
 		// DEBUG - remove this line
-		cout << ", address (hex)" << cutAddress;
+		//cout << ", address (hex)" << cutAddress;
 
 		unsigned long int num = 0;
 		// converts a hexadecimal string representation of an unsigned integer into a value
 		num = strtoul(cutAddress.c_str(), NULL, 16);
 
 		// DEBUG - remove this line
-		cout << " (dec) " << num << endl;
+		//cout << " (dec) " << num << endl;
 
 		
 		//treating read case:
@@ -264,7 +264,8 @@ int main(int argc, char **argv) {
  *
 */
 int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num,unsigned long int num, unsigned MemCyc){
-	unsigned adr_offset, adr_set_L1, adr_set_L2, adr_tag_L1, adr_tag_L2;
+	unsigned adr_offset, adr_set_L1, adr_set_L2; 
+	unsigned long int adr_tag_L1, adr_tag_L2;
 	find_set_tag(L1, num, &adr_offset, &adr_set_L1, &adr_tag_L1);
 	find_set_tag(L2, num, &adr_offset, &adr_set_L2, &adr_tag_L2);
 	
@@ -272,13 +273,13 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 	int existing_way_L1 = way_of_hit(L1, adr_set_L1, adr_tag_L1);
 	if (existing_way_L1 != -1) {
 		//hit write:
-			// update LRU
-		update_LRU(L1, adr_set_L1, i);
+		// update LRU
+		update_LRU(L1, adr_set_L1, existing_way_L1);
 		// update time access
 		*time_access += L1->time_access;
 
 		// mark as dirty
-		(L1->level_rows[adr_set_L1]).ways[i].dirty_bit = true;
+		(L1->level_rows[adr_set_L1]).ways[existing_way_L1].dirty_bit = true;
 		*L1_hit_num += 1;
 		//printf("L1 HIT \n");
 		return 0;
@@ -292,9 +293,10 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 	if (existing_way_L2 != -1) {
 		// is HIT
 		// update LRU + time access
-		update_LRU(L2, adr_set_L2, hit2_way);
+		update_LRU(L2, adr_set_L2, existing_way_L2);
 		// update time access
 		*time_access += L2->time_access;
+		*L2_hit_num += 1;
 
 		if (L2->is_write_allocate) {
 			//check tag of L1
@@ -306,13 +308,13 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 					unsigned long int deleted_address = 0;
 					// find set and tag for L1
 					deleted_address = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
-					unsigned adr_set_L2_deleted, adr_tag_L2_deleted, adr_offset_deleted;
+					unsigned adr_set_L2_deleted, adr_offset_deleted;
+					unsigned long int adr_tag_L2_deleted;
 					find_set_tag(L2, deleted_address, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
 					//find way of L2 where tag already exists 
 					unsigned way = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
 					(L2->level_rows[adr_set_L2_deleted]).ways[way].dirty_bit = true;
 					update_LRU(L2, adr_set_L2_deleted, way);
-					// *time_access += L2->time_access; - NO NEED
 				}
 			}
 
@@ -322,7 +324,6 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 			update_LRU(L1, adr_set_L1, way_to_evict_L1);
 			*time_access += L1->time_access;
 
-			*L2_hit_num += 1;
 			//printf("L2 HIT \n");
 			//write allocate finished
 			return 0;
@@ -331,8 +332,7 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 		else { // no write allocate
 			// time already updated in hit funct
 			// mark as dirty because newly written data
-			(L2->level_rows[adr_set_L2]).ways[hit2_way].dirty_bit = true;
-			*L2_hit_num += 1;
+			(L2->level_rows[adr_set_L2]).ways[existing_way_L2].dirty_bit = true;
 			//printf("L2 HIT \n");
 
 			return 0;
@@ -351,20 +351,19 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 		if (way_to_evict_L2 == -1) { // need to remove from L2
 			way_to_evict_L2 = way_to_evict_LRU(L2, adr_set_L2);
 			if ((L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit == true) {
-				//*time_access += MemCyc;
 				(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = false;
 			}
 			(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = false;
 			// find set and tag for L1
 			unsigned deleted_num = find_orig_address(L2, adr_offset, adr_set_L2, (L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].tag);
-			unsigned adr_set_L1_deleted, adr_tag_L1_deleted, adr_offset_deleted;
+			unsigned adr_set_L1_deleted, adr_offset_deleted;
+			unsigned long int  adr_tag_L1_deleted;
 			find_set_tag(L1, deleted_num, &adr_offset_deleted, &adr_set_L1_deleted, &adr_tag_L1_deleted);
 			
 			unsigned way_to_evict_L1 = find_way_of_tag(L1, adr_set_L1_deleted, adr_tag_L1_deleted);
 			if (way_to_evict_L1 != -1) { //the line of found way from evict LRU in L2 is in L1
 				if ((L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit == true) {
 					(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit = false;
-					// *time_access += MemCyc; - write of P and not M!
 				}
 				(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].valid_bit = false;
 			}
@@ -372,21 +371,20 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 		// write to L2 and update LRU
 		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].tag = adr_tag_L2;
 		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
-		//(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = true; // not in graph!
+		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = false; // not in graph!
 		update_LRU(L2, adr_set_L2, way_to_evict_L2);
 		*time_access += L2->time_access;
 
 		//is write allocate
-		// find set and tag for L1 of M
 		unsigned way_to_evict_L1 = way_to_evict(L1, adr_set_L1);
 		if (way_to_evict_L1 == -1) { // no free space in L1 , find way according to LRU
 			way_to_evict_L1 = way_to_evict_LRU(L1, adr_set_L1);
 			if ((L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit == true) {
 				(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
-				// *time_access += MemCyc; - update of S no need time
 				// find set and tag for L2
 				unsigned long int deleted_address = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
-				unsigned adr_set_L2_deleted, adr_tag_L2_deleted, adr_offset_deleted;
+				unsigned adr_set_L2_deleted, adr_offset_deleted;
+				unsigned long int adr_tag_L2_deleted;
 				find_set_tag(L2, deleted_address, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
 				//find way of L2 where tag already exists 
 				unsigned way = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
@@ -413,7 +411,8 @@ int write_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doub
 */
 int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, double *L1_hit_num,double *L2_hit_num, unsigned long int num, unsigned MemCyc) {
 	
-	unsigned adr_offset, adr_set_L1, adr_set_L2, adr_tag_L1, adr_tag_L2;
+	unsigned adr_offset, adr_set_L1, adr_set_L2;
+	unsigned long int adr_tag_L1, adr_tag_L2;
 	
 	find_set_tag(L1, num, &adr_offset, &adr_set_L1, &adr_tag_L1);
 	find_set_tag(L2, num, &adr_offset, &adr_set_L2, &adr_tag_L2);
@@ -450,18 +449,17 @@ int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doubl
 			if (way_to_evict_L1 == -1) { //no empty space, find smallest LRU
 				way_to_evict_L1 = way_to_evict_LRU(L1, adr_set_L1);
 				if ((L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit == true) { // check if dirty
-					//*time_access += MemCyc;- no need because isnt M
 					(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
 					//find in L2 - mark dirty & update LRU
 					unsigned deleted_num = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
-					unsigned adr_set_L2_deleted, adr_tag_L2_deleted, adr_offset_deleted;
+					unsigned adr_set_L2_deleted, adr_offset_deleted;
+					unsigned long int adr_tag_L2_deleted;
 					find_set_tag(L2, deleted_num, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
 
 					unsigned way_to_evict_L2 = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
 					if (way_to_evict_L2 != -1) { //the line of found way from evict LRU in L1 is in L2 -- MUST BE
 						// if same tag, mark as dirty
 						(L2->level_rows[adr_set_L2_deleted]).ways[way_to_evict_L2].dirty_bit = true;
-						//(L2->level_rows[s]).ways[w].valid_bit == true; // NOT SURE IF NEEDED!
 						// update LRU
 						(L2->level_rows[adr_set_L2_deleted]).ways[way_to_evict_L2].valid_bit = true;
 						update_LRU(L2, adr_set_L2_deleted, way_to_evict_L2);
@@ -487,33 +485,31 @@ int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doubl
 	if (way_to_evict_L2 == -1){ // if no empty, find smallest LRU
 		way_to_evict_L2 = way_to_evict_LRU(L2, adr_set_L2);
 		if ((L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit == true) {
-			//*time_access += MemCyc;
 			(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = false;
 		}
 		(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
 		// find set and tag for L1
 		unsigned deleted_num = find_orig_address(L2, adr_offset, adr_set_L2, (L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].tag);
-		unsigned adr_set_L1_deleted, adr_tag_L1_deleted, adr_offset_deleted;
+		unsigned adr_set_L1_deleted, adr_offset_deleted;
+		unsigned long int adr_tag_L1_deleted;
 		find_set_tag(L1, deleted_num, &adr_offset_deleted, &adr_set_L1_deleted, &adr_tag_L1_deleted);
 
 		unsigned way_to_evict_L1 = find_way_of_tag(L1, adr_set_L1_deleted, adr_tag_L1_deleted);
 		if (way_to_evict_L1 != -1) { //the line of found way from evict LRU in L2 is in L1
 			if ((L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit == true) {
-				//*time_access += MemCyc; //NOT SURE!!
 				(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].dirty_bit = false;
 			}
 			(L1->level_rows[adr_set_L1_deleted]).ways[way_to_evict_L1].valid_bit = false;
-			update_LRU(L1, adr_set_L1_deleted, way_to_evict_L1);
 		}
 	}
 	// write to L2 and update LRU
 	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].tag = adr_tag_L2;
 	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].valid_bit = true;
+	(L2->level_rows[adr_set_L2]).ways[way_to_evict_L2].dirty_bit = false;
 	update_LRU(L2, adr_set_L2, way_to_evict_L2);
 	
 	
 	// bring to L1 - update tag
-	//*time_access += L1->time_access;
 	unsigned way_to_evict_L1 = way_to_evict(L1, adr_set_L1); // check if empty space in L1
 	if (way_to_evict_L1 == -1) { //no empty space, find smallest LRU
 		way_to_evict_L1 = way_to_evict_LRU(L1, adr_set_L1);
@@ -522,29 +518,26 @@ int read_func(double *time_access,double *L1_miss_num,double *L2_miss_num, doubl
 			(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
 			//find in L2 - mark dirty & update LRU
 			unsigned deleted_num = find_orig_address(L1, adr_offset, adr_set_L1, (L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag);
-			unsigned adr_set_L2_deleted, adr_tag_L2_deleted, adr_offset_deleted;
+			unsigned adr_set_L2_deleted, adr_offset_deleted;
+			unsigned long int adr_tag_L2_deleted;
 			find_set_tag(L2, deleted_num, &adr_offset_deleted, &adr_set_L2_deleted, &adr_tag_L2_deleted);
 
 			unsigned way_to_evict_L2 = find_way_of_tag(L2, adr_set_L2_deleted, adr_tag_L2_deleted);
 			if (way_to_evict_L2 != -1) { //the line of found way from evict LRU in L1 is in L2 -- MUST BE
 				// if same tag, mark as dirty
 				(L2->level_rows[adr_set_L2_deleted]).ways[way_to_evict_L2].dirty_bit = true;
-				//(L2->level_rows[s]).ways[w].valid_bit == true; // NOT SURE IF NEEDED!
 				// update LRU
 				(L2->level_rows[adr_set_L2_deleted]).ways[way_to_evict_L2].valid_bit = true;
 				update_LRU(L2, adr_set_L2_deleted, way_to_evict_L2);
-
-
 			}
 		}
 
 	}
 	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].tag = adr_tag_L1;
 	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].valid_bit = true;
+	(L1->level_rows[adr_set_L1]).ways[way_to_evict_L1].dirty_bit = false;
 	update_LRU(L1, adr_set_L1, way_to_evict_L1);
 
-	//update time
-	
 	return 0;
 }
 	
@@ -573,28 +566,21 @@ unsigned way_to_evict_LRU(one_level* L, unsigned set) {
  * param[out] adr_offset, adr_set,adr_tag  - offset, set and tag of address (according to sizes of level)
  * 
 */
-void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned *adr_tag){
+void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, unsigned *adr_set, unsigned long int *adr_tag){
 	// mask all one's
-	//unsigned adr_mask = -1;
 	// ones only where offset is supposed to be
-	//adr_mask = adr_mask >> (32 - L->offset_size);
-	unsigned adr_mask = pow(2,L->offset_size) - 1;
+	unsigned long int adr_mask = pow(2,L->offset_size) - 1;
 	*adr_offset = num & adr_mask ;
 
 
 	//set of address
-	unsigned num_shift = num >> L->offset_size;
-	//unsigned adr_mask_set = -1;
-	//adr_mask_set = adr_mask_set >> (32 - L->set_size);
-	unsigned adr_mask_set = pow(2,L->set_size) - 1;
+	unsigned long int num_shift = num >> L->offset_size;
+	unsigned long int adr_mask_set = pow(2,L->set_size) - 1;
 	*adr_set = num_shift & adr_mask_set;
 
 	//tag address
-	unsigned num_shift_tag = num_shift >> L->set_size;
-	//unsigned adr_mask_tag = -1;
-	//adr_mask_tag = adr_mask >> (32 - L->tag_size);
-	
-	unsigned adr_mask_tag = pow(2,L->tag_size) - 1;
+	unsigned long int num_shift_tag = num_shift >> L->set_size;
+	unsigned long int adr_mask_tag = pow(2,L->tag_size) - 1;
 	*adr_tag = num_shift_tag & adr_mask_tag;
 
 	return;
@@ -604,7 +590,7 @@ void find_set_tag(one_level* L, unsigned long int num, unsigned *adr_offset, uns
  * return original address
  * 
 */
-unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned adr_set,unsigned adr_tag){
+unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned adr_set,unsigned long int adr_tag){
 	unsigned long int deleted_num;
 	deleted_num = adr_tag;
 	deleted_num = deleted_num << L->set_size;
@@ -615,7 +601,7 @@ unsigned long int find_orig_address(one_level* L,unsigned adr_offset,unsigned ad
 }
 
 
-unsigned find_way_of_tag(one_level* L, unsigned set, unsigned tag){
+unsigned find_way_of_tag(one_level* L, unsigned set, unsigned long int tag){
 	for (int i=0; i < L->num_ways ; i++){
 		// update LRU
 		if (((L->level_rows[set]).ways[i].tag == tag)){
@@ -653,7 +639,7 @@ void update_LRU(one_level* L, unsigned adr_set, unsigned curr_way){
 }
 
 
-int way_of_hit(one_level* L, unsigned set, unsigned tag){
+int way_of_hit(one_level* L, unsigned set, unsigned long int tag){
 	for (int i=0; i < L->num_ways ; i++){
 		if ( (tag == (L->level_rows[set]).ways[i].tag) &&
 			((L->level_rows[set]).ways[i].valid_bit == true) ) {
